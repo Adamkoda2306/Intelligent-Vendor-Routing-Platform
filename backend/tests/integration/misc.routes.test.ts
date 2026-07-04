@@ -16,7 +16,7 @@ import {
   mockRoutingLog,
   mockFailoverRoutingLog,
   mockGeminiConfigResponse,
-} from "../fixtures/mockData";
+} from "../fixtures/mock-data";
 
 const strip = ({ _id, ...rest }: Record<string, unknown>) => rest;
 
