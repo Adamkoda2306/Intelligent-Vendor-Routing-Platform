@@ -17,6 +17,15 @@ concurrency:
   group: backend-ci-${{ github.ref }}
   cancel-in-progress: true
 
+# ── Global environment variables ──
+env:
+  NODE_ENV: test
+  PORT: 3000
+  MONGO_URI: ${{ secrets.MONGO_URI }}
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+  CLIENT_ORIGIN: ${{ secrets.CLIENT_ORIGIN }}
+
 defaults:
   run:
     working-directory: backend
