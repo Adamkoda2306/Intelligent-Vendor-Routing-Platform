@@ -121,6 +121,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Trigger Render deploy hook
+        working-directory: . 
         run: |
           response=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}")
           if [ "$response" -ge 200 ] && [ "$response" -lt 300 ]; then
