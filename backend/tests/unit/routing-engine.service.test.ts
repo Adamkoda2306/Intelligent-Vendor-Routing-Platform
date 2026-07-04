@@ -5,7 +5,7 @@ import {
   mockVendorA,
   mockVendorB,
   mockVendorC,
-} from "../fixtures/mockData";
+} from "../fixtures/mock-data";
 
 // The routing engine only reads plain fields, so plain objects cast to
 // VendorDocument are enough — no DB required for these unit tests.

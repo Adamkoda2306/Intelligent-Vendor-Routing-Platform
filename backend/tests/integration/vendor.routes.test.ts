@@ -6,7 +6,7 @@ import {
   clearTestDb,
   disconnectTestDb,
 } from "../setup.db";
-import { mockVendorA, mockVendorB } from "../fixtures/mockData";
+import { mockVendorA, mockVendorB } from "../fixtures/mock-data";
 
 // Strip _id so Mongo generates real ObjectIds for created docs
 const vendorPayloadA = (({ _id, ...rest }) => rest)(mockVendorA);

@@ -1,4 +1,4 @@
-import { mockGeminiConfigResponse, mockRoutingLog } from "../fixtures/mockData";
+import { mockGeminiConfigResponse, mockRoutingLog } from "../fixtures/mock-data";
 
 /**
  * The Gemini SDK is fully mocked — no network calls, no real API key needed.

@@ -1,7 +1,7 @@
 import { metricsService } from "../../src/services/metrics.service";
 import { Metrics } from "../../src/models/Metrics.model";
 import { VendorDocument } from "../../src/models/Vendor.model";
-import { mockVendorA, mockMetricsA } from "../fixtures/mockData";
+import { mockVendorA, mockMetricsA } from "../fixtures/mock-data";
 
 // Fully mock the Mongoose model — no DB involved in unit tests
 jest.mock("../../src/models/Metrics.model", () => ({

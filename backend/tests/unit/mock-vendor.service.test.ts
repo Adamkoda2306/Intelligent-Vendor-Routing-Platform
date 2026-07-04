@@ -1,6 +1,6 @@
 import { mockVendorService } from "../../src/services/mockVendor.service";
 import { VendorDocument } from "../../src/models/Vendor.model";
-import { mockVendorA } from "../fixtures/mockData";
+import { mockVendorA } from "../fixtures/mock-data";
 
 // Small latency so the (real) awaited setTimeout stays fast in tests
 const fastVendor = {

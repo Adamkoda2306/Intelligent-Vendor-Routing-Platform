@@ -16,7 +16,7 @@ import {
   mockVendorDisabled,
   mockVendorOffline,
   mockRoutePayload,
-} from "../fixtures/mockData";
+} from "../fixtures/mock-data";
 
 const BASE = "/api/v1/route";
 
