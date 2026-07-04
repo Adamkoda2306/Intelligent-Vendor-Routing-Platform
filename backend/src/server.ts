@@ -8,6 +8,7 @@ import app from "./app";
 const server = http.createServer(app);
 const io = new Server(server);
 
+// logsave-hub Configuration
 attachDashboard(io);
 
 enableLogging({
