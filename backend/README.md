@@ -1,301 +1,199 @@
-# Intelligent Vendor Routing Platform
+# Backend — Intelligent Vendor Routing Platform
 
-A middleware platform that sits between your application and multiple third-party
-vendors (PAN verification, OCR, SMS, KYC, document verification, etc.) and
-automatically decides which vendor should handle each request — based on cost,
-latency, priority, health, and configurable routing strategies.
-
-Instead of your application juggling multiple vendor SDKs, retry logic, and
-failover rules, it calls **one API** — `POST /route` — and the platform handles
-the rest.
-
----
-
-## Table of Contents
-
-1. [Project Overview](#project-overview)
-2. [Features](#features)
-3. [Tech Stack](#tech-stack)
-4. [Folder Structure](#folder-structure)
-5. [Installation](#installation)
-6. [Environment Variables](#environment-variables)
-7. [MongoDB Setup](#mongodb-setup)
-8. [Running the Backend](#running-the-backend)
-9. [Running the Frontend](#running-the-frontend)
-10. [API Documentation](#api-documentation)
-11. [Sample Data](#sample-data)
-12. [Future Improvements](#future-improvements)
-
----
-
-## Project Overview
-
-Modern applications often rely on more than one vendor for the same capability.
-Each vendor differs in cost, latency, reliability, and rate limits. This project
-implements a **routing engine** that:
-
-- Accepts a single incoming request describing the capability needed (e.g.
-  `PAN_VERIFICATION`) and an optional set of requirements (e.g. "prefer low cost").
-- Filters vendors that support that capability and are currently healthy.
-- Applies one of five routing strategies to pick the best vendor.
-- Calls a **simulated** vendor (mock vendor service) with randomized latency and
-  randomized failure to mimic real-world third-party behavior.
-- Automatically **fails over** to the next-best vendor if the chosen one fails.
-- Logs every decision and updates rolling metrics and health status per vendor.
-- Uses **Gemini 2.5 Flash** to (a) turn a plain-English routing policy into a
-  structured JSON config, and (b) explain, in plain English, why a given vendor
-  was selected for a specific request.
-
-This is a university final-year project: intentionally scoped to be
-**basic-to-intermediate**, readable, and demonstrable — not an enterprise system.
-
----
-
-## Features
-
-| # | Feature | Description |
-|---|---|---|
-| 1 | Vendor Management | Full CRUD for vendors (`name`, `priority`, `weight`, `cost`, `avgLatencyMs`, `rateLimitPerMin`, `capabilities`, `healthStatus`, `enabled`) |
-| 2 | Mock Vendors | Three seeded vendors (A: fast/expensive/reliable, B: medium, C: cheap/slow/unreliable) with randomized latency and failure simulation |
-| 3 | Routing Engine | Five strategies: Priority, Weighted, Lowest Cost, Lowest Latency, Failover |
-| 4 | Route API | `POST /route` — single entry point for all vendor calls |
-| 5 | Metrics | Total/successful/failed requests, average latency, error rate, availability — tracked per vendor |
-| 6 | Health Monitoring | Vendors automatically move between `HEALTHY` → `WARNING` → `OFFLINE` based on live error rate |
-| 7 | Logs | Every routing decision is persisted with timestamp, vendor, reason, latency, and status |
-| 8 | Vendor Metrics API | `GET /vendor-metrics` — aggregated and per-vendor stats |
-| 9 | Health API | `GET /health` — current health status of all vendors |
-| 10 | AI Module | Gemini-powered `POST /ai/generate-config` and `POST /ai/explain-route` |
+The backend is a REST API built with **Node.js, Express, and TypeScript** that
+sits between a client application and multiple third-party vendors (PAN
+verification, OCR, SMS, KYC, etc.). It exposes a single routing endpoint —
+`POST /api/v1/route` — and internally decides which vendor should handle each
+request based on cost, latency, priority, health, and configurable routing
+strategies, with automatic failover when a vendor call fails.
 
 ---
 
 ## Tech Stack
 
-**Frontend:** HTML, CSS, Vanilla JavaScript, Chart.js
-**Backend:** Node.js, TypeScript, Express.js
-**Database:** MongoDB, Mongoose
-**AI:** Gemini 2.5 Flash (`@google/generative-ai`)
-
-No authentication, no microservices, no Docker, no Redis/Kafka — kept
-intentionally simple per project scope.
+| Layer | Technology |
+|---|---|
+| Runtime | Node.js (≥ 18) |
+| Language | TypeScript |
+| Framework | Express.js 4 |
+| Database | MongoDB with Mongoose |
+| AI | Gemini 2.5 Flash (`@google/generative-ai`) |
+| Logging | logsave-hub (file logging + Socket.IO log dashboard) |
+| Testing | Jest, ts-jest, Supertest, mongodb-memory-server |
+| Dev tooling | nodemon, ts-node |
 
 ---
 
 ## Folder Structure
 
 ```
-project-root/
-├── backend/
-│   ├── src/
-│   │   ├── config/          # env + MongoDB connection
-│   │   ├── types/           # shared TypeScript types
-│   │   ├── models/          # Mongoose schemas (Vendor, RoutingLog, Metrics)
-│   │   ├── services/        # business logic (routing engine, mock vendor, gemini, etc.)
-│   │   ├── controllers/     # request handlers
-│   │   ├── routes/          # Express route definitions
-│   │   ├── middlewares/     # error handling, validation, logging
-│   │   ├── utils/           # response helpers, async wrapper, seed script
-│   │   └── server.ts        # app entry point
-│   ├── .env.example
-│   ├── package.json
-│   └── tsconfig.json
-├── frontend/
-│   ├── index.html            # Dashboard
-│   ├── vendors.html          # Vendor management + route tester
-│   ├── metrics.html          # Charts + metrics table
-│   ├── logs.html             # Routing logs + AI explain
-│   ├── ai-config.html        # AI config generator
-│   ├── css/styles.css
-│   └── js/                   # api.js + one file per page
-├── docs/
-│   └── API.md                 # full API reference with examples
-├── sample-data/
-│   ├── vendors.json           # sample vendors collection
-│   ├── routinglogs.json       # sample routing logs collection
-│   └── metrics.json           # sample metrics collection
-├── .env.example
-└── README.md
+backend/
+├── src/
+│   ├── app.ts                    # Express app (routes + middlewares), no server start
+│   ├── server.ts                 # Entry point: HTTP server, Socket.IO, DB connect
+│   ├── config/
+│   │   ├── env.ts                # Typed environment variable loader
+│   │   └── db.ts                 # MongoDB connection
+│   ├── models/                   # Mongoose schemas: Vendor, RoutingLog, Metrics
+│   ├── services/                 # Business logic
+│   │   ├── routingEngine.service.ts   # 5 routing strategies + failover selection
+│   │   ├── mockVendor.service.ts      # Simulated vendor calls (latency + failures)
+│   │   ├── vendor.service.ts          # Vendor CRUD + eligibility filtering
+│   │   ├── metrics.service.ts         # Rolling per-vendor metrics
+│   │   ├── health.service.ts          # HEALTHY / WARNING / OFFLINE evaluation
+│   │   ├── log.service.ts             # Routing decision logs
+│   │   └── gemini.service.ts          # AI config generation + route explanations
+│   ├── controllers/              # Request handlers (one per resource)
+│   ├── routes/                   # Express routers, mounted under /api/v1
+│   ├── middlewares/              # Error handler, request logger, validation
+│   ├── types/                    # Shared TypeScript types
+│   └── utils/                    # Response helpers, async wrapper, seed script
+├── tests/
+│   ├── fixtures/mock-data.ts     # Shared mock vendors, logs, metrics
+│   ├── setup.db.ts               # In-memory MongoDB helpers
+│   ├── unit/                     # Service-level tests (no DB, mocked deps)
+│   └── integration/              # Endpoint tests (Supertest + in-memory Mongo)
+├── jest.config.js
+├── package.json
+└── tsconfig.json
 ```
+
+### Request Flow
+
+```
+Client → routes → controller → services → MongoDB
+                      │
+                      ├── routingEngine.service  (pick the best vendor)
+                      ├── mockVendor.service     (simulate the vendor call)
+                      ├── metrics.service        (record result)
+                      ├── health.service         (re-evaluate vendor health)
+                      └── log.service            (persist the decision)
+```
+
+Controllers never touch Mongoose models directly — all database access goes
+through the service layer.
 
 ---
 
-## Installation
+## Setup
 
-**Prerequisites:** Node.js ≥ 18, MongoDB running locally or a MongoDB Atlas URI, a Gemini API key.
-
-```bash
-# 1. Clone / unzip the project
-cd project-root/backend
-
-# 2. Install backend dependencies
-npm install
-
-# 3. Copy environment variables
-cp .env.example .env
-# then edit .env with your MongoDB URI and Gemini API key
-```
-
-The frontend has no build step or dependencies — it's static HTML/CSS/JS.
-
----
-
-## Environment Variables
-
-Defined in `backend/.env.example`:
-
-```env
-# Server
-PORT=5000
-NODE_ENV=development
-
-# MongoDB
-MONGO_URI=mongodb://127.0.0.1:27017/vendor-routing-platform
-
-# Gemini AI
-GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-2.5-flash
-
-# CORS
-CLIENT_ORIGIN=http://127.0.0.1:5500
-```
-
-| Variable | Description |
-|---|---|
-| `PORT` | Port the Express server listens on |
-| `NODE_ENV` | `development` or `production` |
-| `MONGO_URI` | MongoDB connection string |
-| `GEMINI_API_KEY` | API key for Gemini 2.5 Flash (required for `/ai/*` routes) |
-| `GEMINI_MODEL` | Gemini model name, defaults to `gemini-2.5-flash` |
-| `CLIENT_ORIGIN` | Allowed CORS origin for the frontend (e.g. Live Server URL) |
-
----
-
-## MongoDB Setup
-
-**Option A — Local MongoDB**
-
-```bash
-# macOS (Homebrew)
-brew services start mongodb-community
-
-# Ubuntu/Debian
-sudo systemctl start mongod
-```
-
-Then use `MONGO_URI=mongodb://127.0.0.1:27017/vendor-routing-platform`.
-
-**Option B — MongoDB Atlas**
-
-Create a free cluster at [mongodb.com/atlas](https://www.mongodb.com/atlas), whitelist
-your IP, and use the provided connection string as `MONGO_URI`.
-
-**Seeding mock vendors**
-
-The project ships with a seed script that inserts Vendor A, B, and C exactly as
-described in the spec:
+**Prerequisites:** Node.js ≥ 18, MongoDB (local or Atlas), a Gemini API key.
 
 ```bash
 cd backend
+
+# 1. Install dependencies
+npm install
+
+# 3. Seed the three mock vendors (A, B, C)
 npm run seed
 ```
 
-**Importing sample data (optional)**
+### Environment Variables
 
-To load the sample logs and metrics provided in `sample-data/` for demo purposes:
-
-```bash
-mongoimport --uri="mongodb://127.0.0.1:27017/vendor-routing-platform" \
-  --collection=vendors --file=sample-data/vendors.json --jsonArray
-
-mongoimport --uri="mongodb://127.0.0.1:27017/vendor-routing-platform" \
-  --collection=routinglogs --file=sample-data/routinglogs.json --jsonArray
-
-mongoimport --uri="mongodb://127.0.0.1:27017/vendor-routing-platform" \
-  --collection=metrics --file=sample-data/metrics.json --jsonArray
-```
+| Variable | Description | Example |
+|---|---|---|
+| `PORT` | Port the server listens on | `3000` |
+| `NODE_ENV` | `development` / `production` / `test` | `development` |
+| `MONGO_URI` | MongoDB connection string | `mongodb://127.0.0.1:27017/vendor-routing-platform` |
+| `GEMINI_API_KEY` | API key for the `/ai/*` endpoints | — |
+| `GEMINI_MODEL` | Gemini model name | `gemini-2.5-flash` |
+| `CLIENT_ORIGIN` | Allowed CORS origin for the frontend | `http://127.0.0.1:5500` |
 
 ---
 
-## Running the Backend
+## Running
 
 ```bash
-cd backend
-npm run dev      # development mode with auto-reload (nodemon + ts-node)
+npm run dev       # development with auto-reload (nodemon + ts-node)
+
+npm run build     # compile TypeScript to dist/
+npm start         # run the compiled build (production)
 ```
 
-Or for a production-style run:
-
-```bash
-npm run build     # compiles TypeScript to dist/
-npm start          # runs the compiled JS
-```
-
-The API will be available at `http://localhost:5000` (or whatever `PORT` you set).
-Visiting `http://localhost:5000/` returns a simple JSON health check confirming
-the server is running.
+The API is served at `http://localhost:3000`. A `GET /` returns a JSON health
+check confirming the server is up. The logsave-hub log dashboard is available
+at `/logsave-hub`.
 
 ---
 
-## Running the Frontend
+## Testing
 
-The frontend is fully static. Two easy options:
+Tests are split into fast unit tests (services in isolation, all external
+dependencies mocked — no database, no network, no Gemini key required) and
+integration tests (real HTTP requests via Supertest against an in-memory
+MongoDB spun up by `mongodb-memory-server`).
 
-**Option A — VS Code Live Server**
-Right-click `frontend/index.html` → "Open with Live Server".
-
-**Option B — Any static file server**
 ```bash
-cd frontend
-npx serve .
+npm test                  # run everything
+npm run test:unit         # unit tests only
+npm run test:integration  # integration tests only (runs serially)
+npm run test:coverage     # full run with coverage report in coverage/
 ```
 
-Then make sure `CLIENT_ORIGIN` in the backend `.env` matches the URL the frontend
-is served from (e.g. `http://127.0.0.1:5500`), and that `API_BASE_URL` in
-`frontend/js/api.js` points at your backend (defaults to `http://localhost:5000`).
+Vendor calls in integration tests are made deterministic by spying on the
+mock vendor service, so the randomized failure simulation never causes flaky
+runs. Shared fixtures live in `tests/fixtures/mock-data.ts`.
 
 ---
 
-## API Documentation
+## CI/CD
 
-Full endpoint reference, request/response examples, and error formats live in
-[`docs/API.md`](./docs/API.md).
+A GitHub Actions workflow (`.github/workflows/backend-ci-cd.yml` at the repo
+root) runs on every push/PR that touches `backend/`. It executes unit tests,
+integration tests, and coverage as three parallel jobs; only when all three
+pass on a push to `main` does it trigger a deploy to Render via a deploy hook
+(`RENDER_DEPLOY_HOOK_URL` repository secret).
 
-Quick reference:
+---
+
+## Core Concepts
+
+**Routing strategies** — the engine supports five: `PRIORITY` (default),
+`WEIGHTED` (probabilistic by vendor weight), `LOWEST_COST`, `LOWEST_LATENCY`
+(with optional `maxLatency` filter), and `FAILOVER` (automatic, priority-ordered
+retry when a vendor call fails). If no explicit strategy is given, one is
+derived from requirement flags like `preferLowCost` or `preferLowLatency`.
+
+**Health monitoring** — after every routed request, the vendor's rolling error
+rate is re-evaluated: ≥ 20% moves it to `WARNING`, ≥ 50% to `OFFLINE`. Vendors
+need at least 5 recorded requests before health is judged, and `OFFLINE` or
+disabled vendors are excluded from routing.
+
+**Mock vendors** — third-party calls are simulated with ±40% latency jitter
+around each vendor's average latency and randomized failures based on its
+configured failure rate, mimicking real-world vendor behavior.
+
+**AI module** — Gemini converts plain-English routing policies into structured
+JSON config, and generates plain-English explanations for any persisted
+routing decision.
+
+---
+
+## API Overview
+
+All endpoints are mounted under the `/api/v1` prefix. Full request/response
+examples and error formats are documented separately in
+[`docs/API.md`](../docs/API.md).
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| POST | `/vendors` | Create a vendor |
-| GET | `/vendors` | List all vendors |
-| PUT | `/vendors/:id` | Update a vendor |
-| DELETE | `/vendors/:id` | Delete a vendor |
-| POST | `/route` | Route a request to the best available vendor |
-| GET | `/vendor-metrics` | Get aggregated + per-vendor metrics |
-| GET | `/routing-logs` | Get recent routing logs |
-| GET | `/health` | Get health status of all vendors |
-| POST | `/ai/generate-config` | Generate routing config JSON from plain English |
-| POST | `/ai/explain-route` | Get a plain-English explanation of a routing decision |
+| POST | `/api/v1/vendors` | Create a vendor |
+| GET | `/api/v1/vendors` | List all vendors |
+| PUT | `/api/v1/vendors/:id` | Update a vendor |
+| DELETE | `/api/v1/vendors/:id` | Delete a vendor |
+| POST | `/api/v1/route` | Route a request to the best available vendor |
+| GET | `/api/v1/vendor-metrics` | Aggregated + per-vendor metrics |
+| GET | `/api/v1/routing-logs` | Recent routing decisions (`?limit=` supported) |
+| GET | `/api/v1/health` | Health status of all vendors |
+| POST | `/api/v1/ai/generate-config` | Plain English → routing config JSON |
+| POST | `/api/v1/ai/explain-route` | Plain-English explanation of a routing decision |
 
----
+All responses follow a consistent envelope:
 
-## Sample Data
+```json
+{ "success": true, "message": "…", "data": { } }
+```
 
-The `sample-data/` folder contains ready-to-import JSON fixtures matching the
-Mongoose schemas exactly, useful for demoing the dashboard without manually
-generating traffic:
-
-- `vendors.json` — the three mock vendors with realistic field values
-- `routinglogs.json` — a handful of routing decisions covering all 5 strategies, including one failover case
-- `metrics.json` — corresponding aggregated metrics per vendor
-
-See [Importing sample data](#mongodb-setup) above for how to load them.
-
----
-
-## Future Improvements
-
-- Add authentication and role-based access for the admin dashboard
-- Persist routing strategy configuration (from `/ai/generate-config`) directly
-  into vendor weights instead of just returning JSON
-- Add per-capability rate limiting enforcement using `rateLimitPerMin`
-- Add a real-time view (WebSocket/SSE) instead of polling for the dashboard ticker
-- Support real vendor integrations behind the same `/route` interface
-- Add automated tests (intentionally omitted here to keep scope basic-to-intermediate)
+Errors return `success: false` with an appropriate HTTP status
+(`400`, `404`, `500`, or `502` when a vendor/AI upstream fails).
