@@ -25,7 +25,7 @@ app.get("/", (_req, res) => {
 // Dashboard for Backend Logs
 app.use("/logsave-hub", dashboardRouter as unknown as RequestHandler);
 
-// API routes (mounted at root to match spec: /vendors, /route, /health, etc.)
+// API routes (match spec: /vendors, /route, /health, etc.)
 app.use("/api/v1/", apiRoutes);
 
 // 404 + error handling (must be registered last)
