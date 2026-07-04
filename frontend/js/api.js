@@ -2,7 +2,7 @@
  * Central API client. Every page-specific JS file uses these helpers
  * instead of calling fetch() directly, so the base URL only lives in one place.
  */
-const API_BASE_URL = "http://localhost:3000";
+const API_BASE_URL = "https://intelligent-vendor-routing-platform.onrender.com/api/v1";
 
 const VENDOR_COLORS = {
   "Vendor A": "#3ddbd9",
